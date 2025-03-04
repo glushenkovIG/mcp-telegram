@@ -155,3 +155,82 @@ async def list_messages(
                 response.append(TextContent(type="text", text=message.text))
 
     return response
+
+
+class SearchHashtags(ToolArgs):
+    """Search for specific hashtags in a Telegram group and export results to CSV."""
+    group_id: int
+    hashtags: list[str]
+    output_format: str = "csv"  # csv or txt
+    output_file: str = "hashtag_results"
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "group_id": -1001234567890,
+                "hashtags": ["#intro", "#интро", "#iam", "#whois"],
+                "output_format": "csv",
+                "output_file": "intro_messages"
+            }
+        }
+
+@tool_runner.register
+async def search_hashtags(args: SearchHashtags) -> t.Sequence[TextContent]:
+    """Search for specific hashtags in a Telegram group and export results."""
+    try:
+        # Initialize Telegram client
+        client = TelegramClient(StringSession(), args.api_id, args.api_hash)
+        await client.start()
+        
+        # Get the group entity
+        group = await client.get_entity(args.group_id)
+        
+        # Initialize results
+        messages = []
+        total_count = 0
+        
+        # Search for messages with hashtags
+        async for message in client.iter_messages(group):
+            if message.text:
+                for hashtag in args.hashtags:
+                    if hashtag.lower() in message.text.lower():
+                        messages.append({
+                            'date': message.date.isoformat(),
+                            'user_id': message.sender_id,
+                            'username': message.sender.username if message.sender else 'Unknown',
+                            'message': message.text,
+                            'hashtag': hashtag
+                        })
+                        total_count += 1
+                        break  # Break once we find a matching hashtag
+        
+        # Export results
+        if args.output_format == "csv":
+            import csv
+            with open(f"{args.output_file}.csv", 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=['date', 'user_id', 'username', 'message', 'hashtag'])
+                writer.writeheader()
+                writer.writerows(messages)
+        else:  # txt format
+            with open(f"{args.output_file}.txt", 'w', encoding='utf-8') as f:
+                for msg in messages:
+                    f.write(f"Date: {msg['date']}\n")
+                    f.write(f"User: {msg['username']} (ID: {msg['user_id']})\n")
+                    f.write(f"Message: {msg['message']}\n")
+                    f.write(f"Hashtag: {msg['hashtag']}\n")
+                    f.write("-" * 50 + "\n")
+        
+        await client.disconnect()
+        
+        return [
+            TextContent(
+                text=f"Successfully exported {total_count} messages with hashtags {', '.join(args.hashtags)} to {args.output_file}.{args.output_format}"
+            )
+        ]
+        
+    except Exception as e:
+        return [
+            TextContent(
+                text=f"Error searching hashtags: {str(e)}"
+            )
+        ]

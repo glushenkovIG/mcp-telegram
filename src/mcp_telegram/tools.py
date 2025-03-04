@@ -163,6 +163,8 @@ class SearchHashtags(ToolArgs):
     hashtags: list[str]
     output_format: str = "csv"  # csv or txt
     output_file: str = "hashtag_results"
+    api_id: int
+    api_hash: str
 
     class Config:
         json_schema_extra = {
@@ -170,7 +172,9 @@ class SearchHashtags(ToolArgs):
                 "group_id": -1001234567890,
                 "hashtags": ["#intro", "#интро", "#iam", "#whois"],
                 "output_format": "csv",
-                "output_file": "intro_messages"
+                "output_file": "intro_messages",
+                "api_id": 26162406,
+                "api_hash": "7a005c82feee57d782a7e2f8399ddaf6"
             }
         }
 
@@ -179,8 +183,7 @@ async def search_hashtags(args: SearchHashtags) -> t.Sequence[TextContent]:
     """Search for specific hashtags in a Telegram group and export results."""
     try:
         # Initialize Telegram client
-        client = TelegramClient(StringSession(), args.api_id, args.api_hash)
-        await client.start()
+        client = await create_client()
         
         # Get the group entity
         group = await client.get_entity(args.group_id)
